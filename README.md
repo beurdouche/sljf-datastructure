@@ -1,163 +1,86 @@
-# Merkle Patricia Tree Library
+# Starlit Jellyfish datastructure implementation
 
-A Rust implementation of a **Merkle Patricia Tree** (also known as a Radix Tree or Compressed Trie), combining the features of Patricia Trees and Merkle Trees for efficient key-value storage with cryptographic integrity verification.
+A Rust implementation of a simple Prefix Trie (also known as a Radix Tree), designed for efficient key-value storage with string-based keys. This implementation uses a specific colon-terminated key convention for leaf nodes.
 
 ## Overview
 
 This library provides a tree-based data structure that:
 
-- Efficiently stores and retrieves key-value pairs with shared prefixes
-- Maintains cryptographic integrity through hash chains
-- Supports arbitrary byte keys and values
-- Uses compressed paths to minimize storage overhead
-- Enables fast prefix-based lookups
+-   Efficiently stores and retrieves key-value pairs with shared prefixes.
+-   Uses `String` keys and `String` values.
+-   Follows a specific logic for splitting and merging nodes based on common prefixes.
 
 ## Tree Structure
 
-The implementation supports four node types:
+The implementation supports two node types, defined in the `Node` enum:
 
-- **Leaf Node**: Contains the final key suffix and value
-- **Extension Node**: Represents shared key prefixes pointing to child nodes
-- **Branch Node**: Has up to 16 children (for hexadecimal digits) and optionally a value
-- **Empty Node**: Represents absence of data
-
-```
-       Root
-        |
-    Extension("foo")
-       / \
-   Leaf(bar) Branch
-   "value1"   / | \
-            /  |  \
-     Leaf("")  |  Leaf(foo)
-    "value2"   |  "value3"
-               |
-           Leaf(bar)
-           "value4"
-```
+-   **`Node::Node { children: HashMap<String, Box<Node>> }`**: A branch node that contains a map to its children. The keys in the map are the edge labels. A special `":"` key is used to store a value at an intermediate node path.
+-   **`Node::Leaf { value: String }`**: A leaf node that contains the final value. The key for this leaf is stored as an edge in its parent's `children` map, ending with a `":"`.
 
 ## Features
 
-- **Efficient Storage**: Compressed paths reduce memory usage for sparse key spaces
-- **Fast Retrieval**: O(k) lookup time where k is the key length
-- **Cryptographic Integrity**: Each node is identified by its hash, enabling verification
-- **Flexible Keys**: Supports arbitrary byte sequences as keys
-- **Thread-Safe**: The core data structure can be safely shared across threads
+-   **Efficient Storage**: Shared prefixes reduce memory usage.
+-   **String-based Keys**: Simple to use with string keys.
+-   **Visualizable**: Comes with a `display_tree()` method to print the tree structure to the console for easy debugging.
 
 ## Usage
 
 ### Basic Operations
 
 ```rust
-use sljf_datastructure::MerklePatriciaTree;
+use sljf_datastructure::PrefixTree;
 
 // Create a new tree
-let mut tree = MerklePatriciaTree::new();
+let mut tree = PrefixTree::new();
 
 // Insert key-value pairs
-tree.insert(b"foo", b"value1".to_vec()).unwrap();
-tree.insert(b"foobar", b"value2".to_vec()).unwrap();
-tree.insert(b"foofoo", b"value3".to_vec()).unwrap();
-tree.insert(b"bar", b"value4".to_vec()).unwrap();
+tree.insert("foo", "value1".to_string());
+tree.insert("foobar", "value2".to_string());
+tree.insert("foofoo", "value3".to_string());
+tree.insert("bar", "value4".to_string());
 
 // Retrieve values
-assert_eq!(tree.get(b"foo"), Some(b"value1".to_vec()));
-assert_eq!(tree.get(b"foobar"), Some(b"value2".to_vec()));
-
-// Check existence
-assert!(tree.contains_key(b"foo"));
-assert!(!tree.contains_key(b"nonexistent"));
+assert_eq!(tree.get("foo"), Some("value1".to_string()));
+assert_eq!(tree.get("foobar"), Some("value2".to_string()));
 
 // Get tree statistics
 println!("Tree size: {}", tree.len());
 println!("Is empty: {}", tree.is_empty());
-```
 
-### Hash Verification
-
-```rust
-// Get the root hash for integrity verification
-if let Some(root_hash) = tree.root_hash() {
-    println!("Root hash: {:?}", root_hash);
-}
-
-// Verify the entire tree's integrity
-assert!(tree.verify_integrity());
-```
-
-### Key Enumeration
-
-```rust
-// Get all keys in the tree
-let keys = tree.keys();
-for key in keys {
-    println!("Key: {:?}", String::from_utf8_lossy(&key));
-}
+// Display the tree structure
+tree.display_tree();
 ```
 
 ## API Reference
 
 ### Core Types
 
-- `MerklePatriciaTree`: The main tree structure
-- `Node`: Enum representing different node types
-- `Hash`: 32-byte array type for cryptographic hashes
+-   `PrefixTree`: The main tree structure.
+-   `Node`: Enum representing `Node` and `Leaf` node types.
+-   `Hash`: 32-byte array type for cryptographic hashes (utility, not used in the tree structure itself).
 
 ### Main Methods
 
-- `new()`: Create an empty tree
-- `insert(key, value)`: Insert or update a key-value pair
-- `get(key)`: Retrieve a value by key
-- `contains_key(key)`: Check if a key exists
-- `keys()`: Get all keys in the tree
-- `len()`: Get the number of key-value pairs
-- `is_empty()`: Check if the tree is empty
-- `root_hash()`: Get the root hash for verification
-- `verify_integrity()`: Verify the cryptographic integrity of the entire tree
+-   `new()`: Creates an empty `PrefixTree`.
+-   `default()`: Creates an empty `PrefixTree`.
+-   `insert(key: &str, value: String)`: Inserts or updates a key-value pair.
+-   `get(key: &str) -> Option<String>`: Retrieves a value by key.
+-   `keys() -> Vec<String>`: Gets all keys in the tree.
+-   `len() -> usize`: Gets the number of key-value pairs in the tree.
+-   `is_empty() -> bool`: Checks if the tree is empty.
+-   `display_tree()`: Prints a visual representation of the tree to the console.
 
-## Implementation Details
+## Hashing Utility
 
-### Key Encoding
+The library includes a `hash_bytes` function that uses **Keccak256** for cryptographic hashing.
 
-Keys are converted to **nibbles** (4-bit values) for efficient traversal:
+```rust
+use sljf_datastructure::hash_bytes;
 
-- Each byte becomes two nibbles
-- Enables hexadecimal branching in branch nodes
-- Allows for optimal prefix compression
-
-### Hashing
-
-The library uses **Keccak256** for cryptographic hashing:
-
-- Each node is identified by the hash of its serialized content
-- Provides strong integrity guarantees
-- Compatible with Ethereum and other blockchain systems
-
-### Memory Layout
-
-Nodes are stored in a `HashMap<Hash, Node>` structure:
-
-- Efficient O(1) node access by hash
-- Enables structural sharing and deduplication
-- Supports persistent data structures
-
-## Performance Characteristics
-
-- **Space Complexity**: O(n) where n is the total size of all keys and values
-- **Time Complexity**:
-  - Insert: O(k) where k is the key length
-  - Lookup: O(k) where k is the key length
-  - Delete: O(k) where k is the key length (when implemented)
-
-## Use Cases
-
-This data structure is particularly well-suited for:
-
-- **Blockchain State Trees**: Ethereum uses Merkle Patricia Trees for state storage
-- **Version Control Systems**: Efficient storage of file hierarchies
-- **Prefix-based Routing**: Network routing tables with shared prefixes
-- **Autocomplete Systems**: Fast prefix matching for suggestions
-- **Configuration Management**: Hierarchical configuration storage
+let hash = hash_bytes(b"some data");
+println!("Keccak256 hash: {:?}", hash);
+```
+Note: This hashing function is provided as a utility and is not currently integrated into the `PrefixTree` structure for integrity verification.
 
 ## Testing
 
@@ -168,40 +91,15 @@ cargo test
 ```
 
 The tests cover:
-
-- Basic insertion and retrieval
-- Tree integrity verification
-- Hash consistency
-- Edge cases and error conditions
-- Performance scenarios
+- Basic insertion and retrieval.
+- A specific user-provided scenario for node splitting and merging.
+- Key collection.
 
 ## Dependencies
 
-- `sha3`: Keccak256 cryptographic hashing
-- `serde`: Serialization support
-- `bincode`: Binary serialization format
-- `hex`: Hexadecimal encoding utilities
+-   `sha3`: For Keccak256 cryptographic hashing.
+-   `serde`: For serialization support of the `Node` enum.
 
 ## License
 
-This project is licensed under the MIT OR Apache-2.0 license.
-
-## Contributing
-
-Contributions are welcome! Please ensure that:
-
-- All tests pass
-- Code follows the existing style
-- New features include appropriate tests
-- Documentation is updated for public APIs
-
-## Future Enhancements
-
-Planned improvements include:
-
-- [ ] Delete operation support
-- [ ] Iterator implementations
-- [ ] Persistence layer integration
-- [ ] Parallel tree construction
-- [ ] Memory usage optimizations
-- [ ] Merkle proof generation and verification
+This project is licensed under the MIT OR Apache-2.0 license. (Assuming, please update if incorrect)
